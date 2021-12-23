@@ -1,10 +1,11 @@
-use std::io::{self, BufRead};
 use std::fs;
+use std::io::{self, BufRead};
 
 type Data = Vec<Vec<u8>>;
+
 struct Point {
-    x: usize,
-    y: usize,
+    i: usize,
+    j: usize,
     val: u8,
 }
 
@@ -34,36 +35,34 @@ fn find_low_points(data: &Data) -> Vec<Point> {
                 if j == 0 {
                     (*val < row[1]) && (*val < data[1][0])
                 } else if j == last_col {
-                    (*val < row[j-1]) && (*val < data[1][j])
+                    (*val < row[j - 1]) && (*val < data[1][j])
                 } else {
-                    (*val < row[j-1]) && (*val < row[j+1]) && (*val < data[1][j])
+                    (*val < row[j - 1]) && (*val < row[j + 1]) && (*val < data[1][j])
                 }
             } else if i == last_row {
                 if j == 0 {
-                    (*val < row[1]) && (*val < data[i-1][0])
+                    (*val < row[1]) && (*val < data[i - 1][0])
                 } else if j == last_col {
-                    (*val < row[j-1]) && (*val < data[last_row-1][j])
+                    (*val < row[j - 1]) && (*val < data[last_row - 1][j])
                 } else {
-                    (*val < row[j-1]) && (*val < row[j+1]) && (*val < data[last_row-1][j])
+                    (*val < row[j - 1]) && (*val < row[j + 1]) && (*val < data[last_row - 1][j])
                 }
             } else if j == 0 {
-                (*val < row[j+1]) && (*val < data[i-1][j]) && (*val < data[i+1][j])
+                (*val < row[j + 1]) && (*val < data[i - 1][j]) && (*val < data[i + 1][j])
             } else if j == last_col {
-                (*val < row[j-1]) && (*val < data[i-1][j]) && (*val < data[i+1][j])
+                (*val < row[j - 1]) && (*val < data[i - 1][j]) && (*val < data[i + 1][j])
             } else {
-                (*val < row[j-1]) && (*val < row[j+1]) && (*val < data[i-1][j]) && (*val < data[i+1][j])
+                (*val < row[j - 1])
+                    && (*val < row[j + 1])
+                    && (*val < data[i - 1][j])
+                    && (*val < data[i + 1][j])
             };
             if low_point {
-                low_points.push(Point{x: i, y: j, val: *val});
+                low_points.push(Point{i:i, j:j, val: *val});
             }
         }
     }
     low_points
-}
-
-fn find_basin(low_point: &Point) -> Vec<Point> {
-    let points = vec![];
-    points
 }
 
 fn sum_risk_level(data: &Data, low_points: &Vec<Point>) -> usize {
@@ -82,17 +81,18 @@ fn main() {
     let data = parse_input(reader);
     let low_points = find_low_points(&data);
 
-    println!("Sum of low level points is {}", sum_risk_level(&data, &low_points));
-
-
+    println!(
+        "Sum of low level points is {} - expected 439",
+        sum_risk_level(&data, &low_points)
+    );
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
 
-    const F :&'static [u8] = b"2199943210\n3987894921\n9856789892\n8767896789\n9899965678" as &[u8];
-
+    const F: &'static [u8] =
+        b"2199943210\n3987894921\n9856789892\n8767896789\n9899965678" as &[u8];
 
     #[test]
     fn test_sum_low_points() {
@@ -110,10 +110,10 @@ mod test {
         let low_points = find_low_points(&data);
 
         assert_eq!(4, low_points.len());
-        assert_eq!( (0, 1), (low_points[0].x, low_points[0].y));
-        assert_eq!( (0, 9), (low_points[1].x, low_points[1].y));
-        assert_eq!( (2, 2), (low_points[2].x, low_points[2].y));
-        assert_eq!( (4, 6), (low_points[3].x, low_points[3].y));
+        assert_eq!((0, 1, 1), (low_points[0].i, low_points[0].j, low_points[0].val));
+        assert_eq!((0, 9, 0), (low_points[1].i, low_points[1].j, low_points[1].val));
+        assert_eq!((2, 2, 5), (low_points[2].i, low_points[2].j, low_points[2].val));
+        assert_eq!((4, 6, 5), (low_points[3].i, low_points[3].j, low_points[3].val));
     }
 
     #[test]
@@ -124,5 +124,4 @@ mod test {
         assert_eq!(5, data.len());
         assert_eq!(10, data[0].len());
     }
-
 }
