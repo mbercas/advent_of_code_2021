@@ -5,7 +5,10 @@ fn parse_input(input: &str) -> Vec<u8> {
     let nibble_stream = input
         .trim()
         .chars()
-        .map(|c| c.to_digit(16).expect(format!("can not convert from hex char: {}", c).as_str()) as u8)
+        .map(|c| {
+            c.to_digit(16)
+                .expect(format!("can not convert from hex char: {}", c).as_str()) as u8
+        })
         .collect::<Vec<u8>>();
 
     nibble_stream
@@ -16,24 +19,24 @@ fn parse_input(input: &str) -> Vec<u8> {
 
 #[derive(Debug)]
 struct Packet {
-    version: u32,
-    type_id: u32,
-    size: u32,
+    version: u64,
+    type_id: u64,
+    size: u64,
     payload: Payload,
 }
 
 impl Packet {
-    fn len(&self) -> u32 {
+    fn len(&self) -> u64 {
         self.size
     }
 
-    fn get_version_sum(&self) -> u32 {
+    fn get_version_sum(&self) -> u64 {
         let mut ver_sum = 0;
 
         ver_sum += match &self.payload {
             Payload::Literal(_) => self.version,
             Payload::PacketList(pl) => {
-                let mut sum  = self.version;
+                let mut sum = self.version;
                 for sp in pl {
                     sum += sp.get_version_sum();
                 }
@@ -43,12 +46,46 @@ impl Packet {
         return ver_sum;
     }
 
+    fn get_val(&self) -> u64 {
+        //let mut val = 0;
+        let val = match &self.payload {
+            Payload::Literal(val) => *val,
+            Payload::PacketList(pl) => match self.type_id {
+                0 => pl.iter().map(|p| p.get_val()).sum::<u64>(),
+                1 => pl.iter().map(|p| p.get_val()).product::<u64>(),
+                2 => pl.iter().map(|p| p.get_val()).min().unwrap(),
+                3 => pl.iter().map(|p| p.get_val()).max().unwrap(),
+                5 => {
+                    if pl.get(0).unwrap().get_val() > pl.get(1).unwrap().get_val() {
+                        1
+                    } else {
+                        0
+                    }
+                }
+                6 => {
+                    if pl.get(0).unwrap().get_val() < pl.get(1).unwrap().get_val() {
+                        1
+                    } else {
+                        0
+                    }
+                }
+                7 => {
+                    if pl.get(0).unwrap().get_val() == pl.get(1).unwrap().get_val() {
+                        1
+                    } else {
+                        0
+                    }
+                }
+                _ => 0,
+            },
+        };
+        val
+    }
 }
-
 
 #[derive(Debug)]
 enum Payload {
-    Literal(u32),
+    Literal(u64),
     PacketList(Vec<Packet>),
 }
 
@@ -79,41 +116,37 @@ fn read_packet<I: BitRead>(reader: &mut I) -> Option<Packet> {
     }
 }
 
-fn read_literal<I: BitRead>(reader: &mut I) -> Option<(Payload, u32)> {
+fn read_literal<I: BitRead>(reader: &mut I) -> Option<(Payload, u64)> {
     let mut more_nibbles = true;
     let mut literal = 0;
 
     let mut nibble_counter = 0;
     while more_nibbles {
         more_nibbles = reader.read_bit().unwrap();
-        let nibble = reader.read::<u8>(4).unwrap() as u32;
+        let nibble = reader.read::<u8>(4).unwrap() as u64;
         literal <<= 4;
         literal += nibble;
 
         nibble_counter += 1;
     }
 
-    Some((
-        Payload::Literal(literal),
-        6 + 5 * nibble_counter,
-    ))
-
+    Some((Payload::Literal(literal), 6 + 5 * nibble_counter))
 }
 
-fn read_packet_list<I: BitRead>(reader: &mut I) -> Option<(Payload, u32)> {
+fn read_packet_list<I: BitRead>(reader: &mut I) -> Option<(Payload, u64)> {
     let mut is_mode_number_of_subpackets: bool = false;
-    match  reader.read_bit() {
+    match reader.read_bit() {
         Ok(bit) => is_mode_number_of_subpackets = bit,
         Err(_) => (),
     }
-    let mut length_field_sz = 15;
-    let mut length_field: u32 = 0;
+    let mut length_field_sz: u64 = 15;
+    let mut length_field: u64 = 0;
     let mut packet_list = vec![];
 
     if is_mode_number_of_subpackets {
         length_field_sz = 11;
 
-        let packets_in_payload: u32 = reader.read(length_field_sz).unwrap();
+        let packets_in_payload: u64 = reader.read(length_field_sz.try_into().unwrap()).unwrap();
 
         let mut packet = read_packet(reader);
         let mut packets_read = 0;
@@ -124,7 +157,7 @@ fn read_packet_list<I: BitRead>(reader: &mut I) -> Option<(Payload, u32)> {
                     packet_list.push(p);
                     if packets_read == packets_in_payload.try_into().unwrap() {
                         for pp in &packet_list {
-                            length_field += pp.len() as u32;
+                            length_field += pp.len() as u64;
                         }
                         break;
                     }
@@ -135,11 +168,8 @@ fn read_packet_list<I: BitRead>(reader: &mut I) -> Option<(Payload, u32)> {
                 }
             }
         }
-
-
     } else {
-
-        length_field = reader.read(length_field_sz).unwrap();
+        length_field = reader.read(length_field_sz.try_into().unwrap()).unwrap();
 
         let mut packet = read_packet(reader);
         let mut bits_read = 0;
@@ -160,7 +190,10 @@ fn read_packet_list<I: BitRead>(reader: &mut I) -> Option<(Payload, u32)> {
         }
     }
 
-    Some((Payload::PacketList(packet_list), 7 + length_field_sz + length_field))
+    Some((
+        Payload::PacketList(packet_list),
+        7 + length_field_sz + length_field,
+    ))
 }
 
 fn main() {
@@ -172,9 +205,10 @@ fn main() {
 
     let packet = read_packet(&mut reader).unwrap();
     let version_sum = packet.get_version_sum();
+    let code = packet.get_val();
 
     println!("Version sum is: {}", version_sum);
-
+    println!("Code is: {}", code);
 }
 
 #[cfg(test)]
@@ -190,6 +224,73 @@ mod test {
     const F6: &'static str = "C0015000016115A2E0802F182340";
     const F7: &'static str = "A0016C880162017C3686B18A3D4780";
 
+    const S1: &'static str = "C200B40A82";
+    const S2: &'static str = "04005AC33890";
+    const S3: &'static str = "880086C3E88112";
+    const S4: &'static str = "CE00C43D881120";
+    const S5: &'static str = "D8005AC2A8F0";
+    const S6: &'static str = "F600BC2D8F";
+    const S7: &'static str = "9C005AC2F8F0";
+    const S8: &'static str = "9C0141080250320F1802104A08";
+
+    #[test]
+    fn test_get_val() {
+        let byte_stream = parse_input(&S1);
+        let mut cursor = Cursor::new(&byte_stream);
+        let mut reader = BitReader::endian(&mut cursor, BigEndian);
+        let packet = read_packet(&mut reader).unwrap();
+
+        assert_eq!(3, packet.get_val());
+
+        let byte_stream = parse_input(&S2);
+        let mut cursor = Cursor::new(&byte_stream);
+        let mut reader = BitReader::endian(&mut cursor, BigEndian);
+        let packet = read_packet(&mut reader).unwrap();
+
+        assert_eq!(54, packet.get_val());
+
+        let byte_stream = parse_input(&S3);
+        let mut cursor = Cursor::new(&byte_stream);
+        let mut reader = BitReader::endian(&mut cursor, BigEndian);
+        let packet = read_packet(&mut reader).unwrap();
+
+        assert_eq!(7, packet.get_val());
+
+        let byte_stream = parse_input(&S4);
+        let mut cursor = Cursor::new(&byte_stream);
+        let mut reader = BitReader::endian(&mut cursor, BigEndian);
+        let packet = read_packet(&mut reader).unwrap();
+
+        assert_eq!(9, packet.get_val());
+
+        let byte_stream = parse_input(&S5);
+        let mut cursor = Cursor::new(&byte_stream);
+        let mut reader = BitReader::endian(&mut cursor, BigEndian);
+        let packet = read_packet(&mut reader).unwrap();
+
+        assert_eq!(1, packet.get_val());
+
+        let byte_stream = parse_input(&S6);
+        let mut cursor = Cursor::new(&byte_stream);
+        let mut reader = BitReader::endian(&mut cursor, BigEndian);
+        let packet = read_packet(&mut reader).unwrap();
+
+        assert_eq!(0, packet.get_val());
+
+        let byte_stream = parse_input(&S7);
+        let mut cursor = Cursor::new(&byte_stream);
+        let mut reader = BitReader::endian(&mut cursor, BigEndian);
+        let packet = read_packet(&mut reader).unwrap();
+
+        assert_eq!(0, packet.get_val());
+
+        let byte_stream = parse_input(&S8);
+        let mut cursor = Cursor::new(&byte_stream);
+        let mut reader = BitReader::endian(&mut cursor, BigEndian);
+        let packet = read_packet(&mut reader).unwrap();
+
+        assert_eq!(1, packet.get_val());
+    }
 
     #[test]
     fn test_version_sum() {
@@ -200,14 +301,12 @@ mod test {
 
         assert_eq!(6, packet.get_version_sum());
 
-
         let byte_stream = parse_input(&F2);
         let mut cursor = Cursor::new(&byte_stream);
         let mut reader = BitReader::endian(&mut cursor, BigEndian);
         let packet = read_packet(&mut reader).unwrap();
 
         assert_eq!(9, packet.get_version_sum());
-
 
         let byte_stream = parse_input(&F3);
         let mut cursor = Cursor::new(&byte_stream);
@@ -243,10 +342,7 @@ mod test {
         let packet = read_packet(&mut reader).unwrap();
 
         assert_eq!(31, packet.get_version_sum());
-
     }
-
-
 
     #[test]
     fn test_read_packet_with_packet_list_packetcounttype() {
@@ -258,7 +354,7 @@ mod test {
         let packet = read_packet(&mut reader).unwrap();
         assert_eq!(7, packet.version);
         assert_eq!(3, packet.type_id);
-        assert_eq!(14*4-5, packet.len());
+        assert_eq!(14 * 4 - 5, packet.len());
         let plist = match packet.payload {
             Payload::PacketList(plist) => plist,
             _ => vec![],
@@ -294,9 +390,7 @@ mod test {
             _ => 0,
         };
         assert_eq!(3, literal);
-
     }
-
 
     #[test]
     fn test_read_packet_with_packet_list_lengthtype() {
@@ -308,8 +402,8 @@ mod test {
         let packet = read_packet(&mut reader).unwrap();
         assert_eq!(1, packet.version);
         assert_eq!(6, packet.type_id);
-        assert_eq!(14*4-7, packet.size);
-        assert_eq!(14*4-7, packet.len());
+        assert_eq!(14 * 4 - 7, packet.size);
+        assert_eq!(14 * 4 - 7, packet.len());
         let plist = match packet.payload {
             Payload::PacketList(plist) => plist,
             _ => vec![],
