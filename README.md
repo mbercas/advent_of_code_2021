@@ -19,3 +19,6 @@ I had first though of using a HashMap with te (i, j) as index, but this is overk
 New concepts `State machine`, `bitstream_io` crate.
 
 In this section I will try to implement a state machine to decode the messages. Since the messages are comming in a byte stream but are composed of fields not necesarily aligned to the byte or the nibble (4 bits) I will use the crate `bitstream_io` to stream bits through a reader.
+
+There is a good explanation on how to implement state machines nicely in Rust. [[https://hoverbear.org/blog/rust-state-machine-pattern/]]
+But it is overkill for what we need to do, so finally I resorted to a simpler implementation with two decoding functions and using `enum variants` for the different types of payloads. I have also tried to use `Option` as return types in a more consisting way.
