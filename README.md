@@ -22,3 +22,11 @@ In this section I will try to implement a state machine to decode the messages. 
 
 There is a good explanation on how to implement state machines nicely in Rust. [[https://hoverbear.org/blog/rust-state-machine-pattern/]]
 But it is overkill for what we need to do, so finally I resorted to a simpler implementation with two decoding functions and using `enum variants` for the different types of payloads. I have also tried to use `Option` as return types in a more consisting way.
+
+For both the first and second part I have used recursion to iterate over the nested packets.
+
+## day 17
+
+Not new concepts on this problem.
+
+The trick for this problem is to find good boundaries for the initial velocities for trajectories that will fit into the target so we don't restrict the possible values for the iterations.
